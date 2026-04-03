@@ -1,6 +1,6 @@
 # AI Hedge Fund
 
-This is an extension project for an working AI-powered hedge fund team based off https://github.com/virattt/ai-hedge-fund.  The goal of this project is to explore the use of AI to make trading decisions based off optimizing the orchestration via organizational rebuild and better workflow with self-improving module (WIP) 
+This is an extension project for an working AI-powered hedge fund team based off https://github.com/virattt/ai-hedge-fund.  The goal of this project is to explore the use of AI to make trading decisions by optimizing the orchestration via organizational rebuild and better workflow with self-improving module. (WIP) 
 
 This system employs several teams working together:
 
@@ -19,16 +19,19 @@ Investor advisor team:
 12. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
 
 Analyst Team:
+
 14. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
 15. Sentiment Agent - Analyzes market sentiment and generates trading signals
 16. Fundamentals Agent - Analyzes fundamental data and generates trading signals
 17. Technicals Agent - Analyzes technical indicators and generates trading signals
 
 Goverance:
-18. Risk Managers(committee)? - Calculates risk metrics and sets position limits
+
+Risk Managers(committee)? - Calculates risk metrics and sets position limits
 
 Execution:
-19. Portfolio Manager - Makes final trading decisions and generates orders
+
+Portfolio Manager - Makes final trading decisions and generates orders
 
 
 Note: the system does not actually make any trades now.
