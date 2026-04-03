@@ -53,5 +53,16 @@
     "display_name": "Llama 3.3 (70B)",
     "model_name": "llama3.3:70b-instruct-q4_0",
     "provider": "Meta"
+  },
+  {
+    "display_name": "Qwen 3.5-latest",
+    "model_name": "qwen3.5",
+    "provider": "Alibaba"
+  },
+  {
+    "display_name": "nemotron-3.0",
+    "model_name": "nemotron-3-super",
+    "provider": "NVIDIA"
   }
 ] 
+

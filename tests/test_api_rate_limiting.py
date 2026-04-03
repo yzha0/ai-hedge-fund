@@ -1,6 +1,7 @@
 import os
 import pytest
 from unittest.mock import Mock, patch, call
+from requests.exceptions import ConnectionError
 
 from src.tools.api import _make_api_request, get_prices
 
@@ -166,6 +167,20 @@ class TestRateLimiting:
         
         # Verify sleep was never called
         mock_sleep.assert_not_called()
+
+    @patch('src.tools.api.requests.get')
+    def test_handles_connection_error_without_raising(self, mock_get):
+        """Test that transport failures return a synthetic error response."""
+        mock_get.side_effect = ConnectionError("dns lookup failed")
+
+        headers = {"X-API-KEY": "test-key"}
+        url = "https://api.financialdatasets.ai/test"
+
+        result = _make_api_request(url, headers)
+
+        assert result.status_code == 503
+        assert result.url == url
+        assert "dns lookup failed" in result.text
 
     @patch('src.tools.api._cache')
     @patch('src.tools.api.time.sleep')

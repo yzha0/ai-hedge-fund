@@ -1,5 +1,9 @@
 from pydantic import BaseModel
-
+'''
+This file defines the data models used for 
+interacting with the financial data APIs and for 
+structuring the agent's state and analysis. It includes models for price data, financial statements, financial metrics, insider trades, company news, company facts, and the agent's portfolio and analysis outputs.
+'''
 
 class Price(BaseModel):
     open: float
@@ -13,6 +17,68 @@ class Price(BaseModel):
 class PriceResponse(BaseModel):
     ticker: str
     prices: list[Price]
+
+class IncomeStatement(BaseModel):
+    ticker: str
+    report_period: str
+    fiscal_period: str
+    period: str
+    currency: str
+    accession_number: str
+    filing_url: str
+    revenue: float | None
+    cost_of_revenue: float | None
+    gross_profit: float | None
+    operating_expenses: float | None
+    selling_general_and_administrative_expenses: float | None
+    research_and_development_expenses: float | None
+    operating_income: float | None
+    interest_expense: float | None
+    ebit: float | None
+    income_tax_expense: float | None
+
+    net_income: float | None
+    net_income_common_stock: float | None
+    preferred_dividends: float | None
+    
+
+class IncomeStatementResponse(BaseModel):
+    income_statements: list[IncomeStatement]
+
+class BalanceSheet(BaseModel):
+    ticker: str
+    report_period: str
+    fiscal_period: str
+    period: str
+    currency: str
+    accession_number: str
+    filing_url: str
+    total_assets: float | None
+    current_assets: float | None
+    cash_and_equivalents: float | None
+    trade_and_non_trade_receivables: float | None
+    non_current_assets: float | None
+    property_plant_and_equipment: float | None
+    total_liabilities: float | None
+    total_equity: float | None
+
+class BalanceSheetResponse(BaseModel):
+    balance_sheets: list[BalanceSheet]
+
+class CashFlowStatement(BaseModel):
+    ticker: str
+    report_period: str
+    fiscal_period: str
+    period: str
+    currency: str
+    accession_number: str
+    filing_url: str
+    operating_cash_flow: float | None
+    investing_cash_flow: float | None
+    financing_cash_flow: float | None
+    free_cash_flow: float | None
+class CashFlowStatementResponse(BaseModel):
+    cash_flow_statements: list[CashFlowStatement]
 
 
 class FinancialMetrics(BaseModel):
@@ -100,12 +166,11 @@ class InsiderTradeResponse(BaseModel):
 
 
 class CompanyNews(BaseModel):
-    ticker: str
-    title: str
-    author: str
-    source: str
-    date: str
-    url: str
+    ticker: str | None = None
+    title: str | None = None
+    source: str | None = None
+    date: str | None = None
+    url: str | None = None
     sentiment: str | None = None
 
 

@@ -8,6 +8,15 @@ from typing_extensions import Literal
 from src.utils.progress import progress
 from src.utils.llm import call_llm
 from src.utils.api_key import get_api_key_from_state
+from src.utils.agent_debug import (
+    collect_data_gaps,
+    gap_if_count_lt,
+    gap_if_empty,
+    gap_if_len_lt,
+    gap_if_none,
+    log_data_fetch_debug,
+)
+
 
 class CharlieMungerSignal(BaseModel):
     signal: Literal["bullish", "bearish", "neutral"]
@@ -73,8 +82,18 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
         company_news = get_company_news(
             ticker,
             end_date,
-            limit=10,
+            limit=50,
             api_key=api_key,
+        )
+        #PATCH FOR DETECTING DATA LOSS
+        log_data_fetch_debug(
+            agent_id,
+            ticker,
+            metrics=metrics,
+            line_items=financial_line_items,
+            market_cap=market_cap,
+            insider_trades=insider_trades,
+            news=company_news,
         )
         
         progress.update_status(agent_id, ticker, "Analyzing moat strength")
@@ -119,6 +138,32 @@ def charlie_munger_agent(state: AgentState, agent_id: str = "charlie_munger_agen
             # Include some qualitative assessment from news
             "news_sentiment": analyze_news_sentiment(company_news) if company_news else "No news data available"
         }
+
+        # Log the analysis summary and any data gaps 
+        data_gaps = collect_data_gaps(
+            gap_if_empty("financial_metrics", metrics),
+            gap_if_empty("line_items", financial_line_items),
+            gap_if_len_lt("line_items", financial_line_items, 5, "<5 for predictability"),
+            gap_if_count_lt(
+                "fcf_points",
+                sum(
+                    1
+                    for item in financial_line_items
+                    if hasattr(item, "free_cash_flow") and item.free_cash_flow is not None
+                ),
+                3,
+                "<3 for valuation",
+            ),
+            gap_if_none("market_cap", market_cap),
+            gap_if_empty("insider_trades", insider_trades),
+            gap_if_empty("news", company_news),
+        )
+        print(
+            f"[charlie_munger_agent][{ticker}] analysis "
+            f"signal={signal} "
+            f"score={total_score:.2f}/{max_possible_score} "
+            f"gaps={'none' if not data_gaps else ', '.join(data_gaps)}"
+        )
         
         progress.update_status(agent_id, ticker, "Generating Charlie Munger analysis")
         munger_output = generate_munger_output(
@@ -820,7 +865,7 @@ def generate_munger_output(
     agent_id: str,
     confidence_hint: int,
 ) -> CharlieMungerSignal:
-    facts_bundle = make_munger_facts_bundle(analysis_data)
+    facts = make_munger_facts_bundle(analysis_data)
     template = ChatPromptTemplate.from_messages([
         ("system",
          "You are Charlie Munger. Decide bullish, bearish, or neutral using only the facts. "
@@ -828,7 +873,7 @@ def generate_munger_output(
          "Use the provided confidence exactly; do not change it."),
         ("human",
          "Ticker: {ticker}\n"
-         "Facts:\n{facts}\n"
+         "Facts:   {facts}\n"
          "Confidence: {confidence}\n"
          "Return exactly:\n"
          "{{\n"  # escaped {
@@ -840,7 +885,7 @@ def generate_munger_output(
 
     prompt = template.invoke({
         "ticker": ticker,
-        "facts": json.dumps(facts_bundle, separators=(",", ":"), ensure_ascii=False),
+        "facts": json.dumps(facts, separators=(",", ":"), ensure_ascii=False),
         "confidence": confidence_hint,
     })
 

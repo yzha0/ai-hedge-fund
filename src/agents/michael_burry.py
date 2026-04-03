@@ -19,6 +19,14 @@ from src.tools.api import (
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
+from src.utils.agent_debug import (
+    collect_data_gaps,
+    gap_if_count_lt,
+    gap_if_empty,
+    gap_if_len_lt,
+    gap_if_none,
+    log_data_fetch_debug,
+)
 
 
 class MichaelBurrySignal(BaseModel):
@@ -47,7 +55,7 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
         # Fetch raw data
         # ------------------------------------------------------------------
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=5, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=30, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Fetching line items")
         line_items = search_line_items(
@@ -61,20 +69,43 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
                 "total_liabilities",
                 "outstanding_shares",
                 "issuance_or_purchase_of_equity_shares",
+                "ebit"
             ],
             end_date,
             api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Fetching insider trades")
-        insider_trades = get_insider_trades(ticker, end_date=end_date, start_date=start_date)
+        insider_trades = get_insider_trades(
+            ticker,
+            end_date=end_date,
+            start_date=start_date,
+            limit=50,
+            api_key=api_key,
+        )
 
         progress.update_status(agent_id, ticker, "Fetching company news")
-        news = get_company_news(ticker, end_date=end_date, start_date=start_date, limit=250)
+        news = get_company_news(
+            ticker,
+            end_date=end_date,
+            start_date=start_date,
+            limit=50,
+            api_key=api_key,
+        )
 
         progress.update_status(agent_id, ticker, "Fetching market cap")
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
-
+        
+        #PATCH FOR DETECTING DATA LOSS
+        log_data_fetch_debug(
+            agent_id,
+            ticker,
+            metrics=metrics,
+            line_items=line_items,
+            market_cap=market_cap,
+            insider_trades=insider_trades,
+            news=news,
+        )
         # ------------------------------------------------------------------
         # Run sub‑analyses
         # ------------------------------------------------------------------
@@ -126,11 +157,37 @@ def michael_burry_agent(state: AgentState, agent_id: str = "michael_burry_agent"
             "contrarian_analysis": contrarian_analysis,
             "market_cap": market_cap,
         }
+        
+        # Log the analysis summary and any data gaps 
+        data_gaps = collect_data_gaps(
+            gap_if_empty("financial_metrics", metrics),
+            gap_if_empty("line_items", line_items),
+            gap_if_len_lt("line_items", line_items, 5, "<5 for predictability"),
+            gap_if_count_lt(
+                "fcf_points",
+                sum(
+                    1
+                    for item in line_items
+                    if hasattr(item, "free_cash_flow") and item.free_cash_flow is not None
+                ),
+                3,
+                "<3 for valuation",
+            ),
+            gap_if_none("market_cap", market_cap),
+            gap_if_empty("insider_trades", insider_trades),
+            gap_if_empty("news", news),
+        )
+        print(
+            f"[michael_burry_agent][{ticker}] analysis "
+            f"signal={signal} "
+            f"score={total_score:.2f}/{max_score} "
+            f"gaps={'none' if not data_gaps else ', '.join(data_gaps)}"
+        )
 
         progress.update_status(agent_id, ticker, "Generating LLM output")
         burry_output = _generate_burry_output(
             ticker=ticker,
-            analysis_data=analysis_data,
+            analysis_data=analysis_data[ticker],
             state=state,
             agent_id=agent_id,
         )
@@ -198,7 +255,10 @@ def _analyze_value(metrics, line_items, market_cap):
 
     # EV/EBIT (from financial metrics)
     if metrics:
-        ev_ebit = getattr(metrics[0], "ev_to_ebit", None)
+        #ev_ebit = getattr(metrics[0], "ev_to_ebit", None)
+        EV = market_cap+getattr(latest_item, "total_debt", 0) - getattr(latest_item, "cash_and_equivalents", 0)
+        EBIT = getattr(latest_item, "ebit", None)
+        ev_ebit = EV /EBIT
         if ev_ebit is not None:
             if ev_ebit < 6:
                 score += 2

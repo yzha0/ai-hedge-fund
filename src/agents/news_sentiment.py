@@ -22,6 +22,99 @@ class Sentiment(BaseModel):
     confidence: int = Field(description="Confidence 0-100")
 
 
+def analyze_news_sentiment_data(
+    company_news: list[CompanyNews],
+    ticker: str,
+    state: AgentState,
+    agent_id: str,
+) -> dict:
+    """
+    Classify missing article sentiment with the LLM, then aggregate to a ticker-level
+    bullish/bearish/neutral signal with confidence and reasoning.
+    """
+    news_signals = []
+    sentiment_confidences = {}
+    sentiments_classified_by_llm = 0
+
+    if company_news:
+        recent_articles = company_news[:10]
+        articles_without_sentiment = [news for news in recent_articles if news.sentiment is None]
+
+        if articles_without_sentiment:
+            #num_articles_to_analyze = 5
+            articles_to_analyze = articles_without_sentiment #[:num_articles_to_analyze]
+            progress.update_status(agent_id, ticker, f"Analyzing sentiment for {len(articles_to_analyze)} articles")
+
+            for idx, news in enumerate(articles_to_analyze):
+                progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
+                prompt = (
+                    f"Please analyze the sentiment of the following news headline "
+                    f"with the following context: "
+                    f"The stock is {ticker}. "
+                    f"Determine if sentiment is 'positive', 'negative', or 'neutral' for the stock {ticker} only. "
+                    f"Also provide a confidence score for your prediction from 0 to 100. "
+                    f"Respond in JSON format.\n\n"
+                    f"Headline: {news.title}"
+                )
+                response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
+                if response:
+                    news.sentiment = response.sentiment
+                    sentiment_confidences[id(news)] = response.confidence
+                else:
+                    news.sentiment = "neutral"
+                    sentiment_confidences[id(news)] = 0
+                sentiments_classified_by_llm += 1
+
+        sentiment = pd.Series([n.sentiment for n in company_news]).dropna()
+        news_signals = np.where(
+            sentiment == "negative",
+            "bearish",
+            np.where(sentiment == "positive", "bullish", "neutral"),
+        ).tolist()
+
+    bullish_signals = news_signals.count("bullish")
+    bearish_signals = news_signals.count("bearish")
+    neutral_signals = news_signals.count("neutral")
+
+    if bullish_signals > bearish_signals:
+        overall_signal = "bullish"
+    elif bearish_signals > bullish_signals:
+        overall_signal = "bearish"
+    else:
+        overall_signal = "neutral"
+
+    total_signals = len(news_signals)
+    confidence = _calculate_confidence_score(
+        sentiment_confidences=sentiment_confidences,
+        company_news=company_news,
+        overall_signal=overall_signal,
+        bullish_signals=bullish_signals,
+        bearish_signals=bearish_signals,
+        total_signals=total_signals,
+    )
+
+    reasoning = {
+        "news_sentiment": {
+            "signal": overall_signal,
+            "confidence": confidence,
+            "metrics": {
+                "total_articles": total_signals,
+                "bullish_articles": bullish_signals,
+                "bearish_articles": bearish_signals,
+                "neutral_articles": neutral_signals,
+                "articles_classified_by_llm": sentiments_classified_by_llm,
+            },
+        }
+    }
+
+    return {
+        "signal": overall_signal,
+        "confidence": confidence,
+        "reasoning": reasoning,
+        "news_signals": news_signals,
+    }
+
+
 def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agent"):
     """
     Analyzes news sentiment for a list of tickers and generates trading signals.
@@ -48,100 +141,21 @@ def news_sentiment_agent(state: AgentState, agent_id: str = "news_sentiment_agen
         company_news = get_company_news(
             ticker=ticker,
             end_date=end_date,
-            limit=100,
+            limit=50,
             api_key=api_key,
         )
-
-        news_signals = []
-        sentiment_confidences = {}  # Store confidence scores for each article
-        
-        if company_news:
-            # Check the 10 most recent articles
-            recent_articles = company_news[:10]
-            articles_without_sentiment = [news for news in recent_articles if news.sentiment is None]
-            
-            # Analyze only the 5 most recent articles without sentiment to reduce LLM calls
-            sentiments_classified_by_llm = 0
-            if articles_without_sentiment:
-              # We only take the first 5 articles, but this is configurable
-              num_articles_to_analyze = 5
-              articles_to_analyze = articles_without_sentiment[:num_articles_to_analyze]
-              progress.update_status(agent_id, ticker, f"Analyzing sentiment for {len(articles_to_analyze)} articles")
-              
-              for idx, news in enumerate(articles_to_analyze):
-                # We analyze based on title, but can also pass in the entire article text,
-                # but this is more expensive and requires extracting the text from the article.
-                # Note: this is an opportunity for improvement!
-                progress.update_status(agent_id, ticker, f"Analyzing sentiment for article {idx + 1} of {len(articles_to_analyze)}")
-                prompt = (
-                    f"Please analyze the sentiment of the following news headline "
-                    f"with the following context: "
-                    f"The stock is {ticker}. "
-                    f"Determine if sentiment is 'positive', 'negative', or 'neutral' for the stock {ticker} only. "
-                    f"Also provide a confidence score for your prediction from 0 to 100. "
-                    f"Respond in JSON format.\n\n"
-                    f"Headline: {news.title}"
-                )
-                response = call_llm(prompt, Sentiment, agent_name=agent_id, state=state)
-                if response:
-                    news.sentiment = response.sentiment.lower()
-                    sentiment_confidences[id(news)] = response.confidence
-                else:
-                    news.sentiment = "neutral"
-                    sentiment_confidences[id(news)] = 0
-                sentiments_classified_by_llm += 1
-
-            # Aggregate sentiment across all articles
-            sentiment = pd.Series([n.sentiment for n in company_news]).dropna()
-            news_signals = np.where(sentiment == "negative","bearish", np.where(sentiment == "positive", "bullish", "neutral")).tolist()
-
         progress.update_status(agent_id, ticker, "Aggregating signals")
-
-        # Calculate the sentiment signals
-        bullish_signals = news_signals.count("bullish")
-        bearish_signals = news_signals.count("bearish")
-        neutral_signals = news_signals.count("neutral")
-
-        if bullish_signals > bearish_signals:
-            overall_signal = "bullish"
-        elif bearish_signals > bullish_signals:
-            overall_signal = "bearish"
-        else:
-            overall_signal = "neutral"
-
-        total_signals = len(news_signals)
-        confidence = _calculate_confidence_score(
-            sentiment_confidences=sentiment_confidences,
-            company_news=company_news,
-            overall_signal=overall_signal,
-            bullish_signals=bullish_signals,
-            bearish_signals=bearish_signals,
-            total_signals=total_signals
-        )
-
-        # Create reasoning for the news sentiment
-        reasoning = {
-            "news_sentiment": {
-                "signal": overall_signal,
-                "confidence": confidence,
-                "metrics": {
-                    "total_articles": total_signals,
-                    "bullish_articles": bullish_signals,
-                    "bearish_articles": bearish_signals,
-                    "neutral_articles": neutral_signals,
-                    "articles_classified_by_llm": sentiments_classified_by_llm,
-                },
-            }
-        }
+        news_result = analyze_news_sentiment_data(company_news, ticker, state, agent_id)
 
         # Create the sentiment analysis
         sentiment_analysis[ticker] = {
-            "signal": overall_signal,
-            "confidence": confidence,
-            "reasoning": reasoning,
+            "signal": news_result["signal"],
+            "overall_signal": news_result["signal"],
+            "confidence": news_result["confidence"],
+            "reasoning": news_result["reasoning"],
         }
 
-        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(reasoning, indent=4))
+        progress.update_status(agent_id, ticker, "Done", analysis=json.dumps(news_result["reasoning"], indent=4))
 
     message = HumanMessage(
         content=json.dumps(sentiment_analysis),

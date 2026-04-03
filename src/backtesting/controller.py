@@ -21,6 +21,19 @@ class AgentController:
         model_provider: str,
         selected_analysts: Sequence[str] | None,
     ) -> AgentOutput:
+        '''
+        run_agent is responsible for invoking the trading agent 
+        with the provided context and normalizing its output 
+        to ensure it adheres to expected formats and types. 
+        It handles both Portfolio objects and plain snapshot dictionaries, 
+        ensuring backward compatibility with legacy expectations. 
+        The method also includes robust coercion and validation of the agent's decisions 
+        to maintain consistency in the backtesting engine's processing.
+        
+        Output:
+        An AgentOutput Class dictionary containing normalized "decisions" for each ticker 
+        and any "analyst_signals" provided by the agent.
+        '''
         # Ensure we pass a plain snapshot dict to preserve legacy expectations
         if isinstance(portfolio, Portfolio):
             portfolio_payload: PortfolioSnapshot = portfolio.get_snapshot()

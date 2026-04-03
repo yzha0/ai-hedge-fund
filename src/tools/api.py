@@ -23,6 +23,16 @@ from src.data.models import (
 _cache = get_cache()
 
 
+def _build_error_response(url: str, status_code: int, message: str) -> requests.Response:
+    """Create a synthetic response object for transport-level request failures."""
+    response = requests.Response()
+    response.status_code = status_code
+    response.url = url
+    response.reason = message
+    response._content = message.encode("utf-8")
+    return response
+
+
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
     """
     Make an API request with rate limiting handling and moderate backoff.
@@ -35,16 +45,19 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
         max_retries: Maximum number of retries (default: 3)
     
     Returns:
-        requests.Response: The response object
-    
-    Raises:
-        Exception: If the request fails with a non-429 error
+        requests.Response: The response object. Transport-level request failures
+        are converted into a synthetic non-200 response so callers can degrade
+        gracefully instead of raising.
     """
     for attempt in range(max_retries + 1):  # +1 for initial attempt
-        if method.upper() == "POST":
-            response = requests.post(url, headers=headers, json=json_data)
-        else:
-            response = requests.get(url, headers=headers)
+        try:
+            if method.upper() == "POST":
+                response = requests.post(url, headers=headers, json=json_data)
+            else:
+                response = requests.get(url, headers=headers)
+        except requests.RequestException as exc:
+            print(f"API Request Error: {exc}")
+            return _build_error_response(url, 503, str(exc))
         
         if response.status_code == 429 and attempt < max_retries:
             # Linear backoff: 60s, 90s, 120s, 150s...
@@ -275,9 +288,26 @@ def get_company_news(
 
         try:
             data = response.json()
-            response_model = CompanyNewsResponse(**data)
-            company_news = response_model.news
-        except:
+            raw_news = data.get("news", [])
+            if not isinstance(raw_news, list):
+                print(f"News API Error: unexpected payload shape for {ticker}: keys={list(data.keys())}")
+                break
+
+            company_news = []
+            skipped_items = 0
+            for item in raw_news:
+                try:
+                    company_news.append(CompanyNews(**item))
+                except Exception:
+                    skipped_items += 1
+
+            if skipped_items:
+                print(
+                    f"News API Warning: skipped {skipped_items} malformed news items "
+                    f"for {ticker} (limit={limit}, end_date={current_end_date})"
+                )
+        except Exception as e:
+            print(f"News API Parse Error for {ticker}: {e}")
             break  # Parsing error, exit loop
 
         if not company_news:
@@ -290,7 +320,10 @@ def get_company_news(
             break
 
         # Update end_date to the oldest date from current batch for next iteration
-        current_end_date = min(news.date for news in company_news).split("T")[0]
+        dated_news = [news.date for news in company_news if news.date]
+        if not dated_news:
+            break
+        current_end_date = min(dated_news).split("T")[0]
 
         # If we've reached or passed the start_date, we can stop
         if current_end_date <= start_date:
@@ -311,6 +344,7 @@ def get_market_cap(
 ) -> float | None:
     """Fetch market cap from the API."""
     # Check if end_date is today
+    '''
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
         headers = {}
@@ -327,7 +361,7 @@ def get_market_cap(
         data = response.json()
         response_model = CompanyFactsResponse(**data)
         return response_model.company_facts.market_cap
-
+'''
     financial_metrics = get_financial_metrics(ticker, end_date, api_key=api_key)
     if not financial_metrics:
         return None

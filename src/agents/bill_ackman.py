@@ -100,7 +100,7 @@ def bill_ackman_agent(state: AgentState, agent_id: str = "bill_ackman_agent"):
         progress.update_status(agent_id, ticker, "Generating Bill Ackman analysis")
         ackman_output = generate_ackman_output(
             ticker=ticker, 
-            analysis_data=analysis_data,
+            analysis_data=analysis_data[ticker],
             state=state,
             agent_id=agent_id,
         )

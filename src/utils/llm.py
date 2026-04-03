@@ -66,6 +66,13 @@ def call_llm(
                 parsed_result = extract_json_from_response(result.content)
                 if parsed_result:
                     return pydantic_model(**parsed_result)
+                raw_content = getattr(result, "content", "")
+                raw_preview = raw_content[:800] if isinstance(raw_content, str) else str(raw_content)[:800]
+                print(
+                    f"[call_llm][{agent_name or 'unknown_agent'}] "
+                    f"Unparseable non-JSON response from {model_provider}/{model_name} "
+                    f"on attempt {attempt + 1}/{max_retries}: {raw_preview}"
+                )
             else:
                 return result
 
@@ -78,9 +85,14 @@ def call_llm(
                 # Use default_factory if provided, otherwise create a basic default
                 if default_factory:
                     return default_factory()
-                return create_default_response(pydantic_model)
+                else:
+                    return create_default_response(pydantic_model)
 
-    # This should never be reached due to the retry logic above
+    # This is reached when no exception was raised, but we also never produced a
+    # structured result (for example, a non-JSON-mode model returned content we
+    # could not parse). Keep the fallback consistent with the final retry path.
+    if default_factory:
+        return default_factory()
     return create_default_response(pydantic_model)
 
 
@@ -107,14 +119,26 @@ def create_default_response(model_class: type[BaseModel]) -> BaseModel:
 
 
 def extract_json_from_response(content: str) -> dict | None:
-    """Extracts JSON from markdown-formatted response."""
+    """Extract JSON from either raw JSON or markdown-formatted JSON."""
     try:
+        content = content.strip()
+
+        # First handle the common case where the model returns raw JSON directly.
+        if content.startswith("{") or content.startswith("["):
+            return json.loads(content)
+
         json_start = content.find("```json")
         if json_start != -1:
             json_text = content[json_start + 7 :]  # Skip past ```json
             json_end = json_text.find("```")
             if json_end != -1:
                 json_text = json_text[:json_end].strip()
+                return json.loads(json_text)
+
+        # Also support fenced code blocks without an explicit `json` language tag.
+        if content.startswith("```") and content.endswith("```"):
+            json_text = content[3:-3].strip()
+            if json_text:
                 return json.loads(json_text)
     except Exception as e:
         print(f"Error extracting JSON from response: {e}")

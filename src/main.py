@@ -49,6 +49,7 @@ def run_hedge_fund(
     end_date: str,
     portfolio: dict,
     show_reasoning: bool = False,
+    show_agent_graph: bool = False,
     selected_analysts: list[str] = [],
     model_name: str = "gpt-4.1",
     model_provider: str = "OpenAI",
@@ -60,6 +61,9 @@ def run_hedge_fund(
         # Build workflow (default to all analysts when none provided)
         workflow = create_workflow(selected_analysts if selected_analysts else None)
         agent = workflow.compile()
+         # Visualize graph if requested
+        if show_agent_graph:
+            agent.get_graph().draw_mermaid_png(output_file_path="agent_graph.png")
 
         final_state = agent.invoke(
             {
@@ -86,6 +90,7 @@ def run_hedge_fund(
         return {
             "decisions": parse_hedge_fund_response(final_state["messages"][-1].content),
             "analyst_signals": final_state["data"]["analyst_signals"],
+            "model_name":final_state["metadata"]["model_name"]
         }
     finally:
         # Stop progress tracking
@@ -127,6 +132,9 @@ def create_workflow(selected_analysts=None):
     workflow.add_edge("portfolio_manager", END)
 
     workflow.set_entry_point("start_node")
+
+    
+    
     return workflow
 
 
@@ -172,6 +180,7 @@ if __name__ == "__main__":
         end_date=inputs.end_date,
         portfolio=portfolio,
         show_reasoning=inputs.show_reasoning,
+        show_agent_graph=inputs.show_agent_graph,
         selected_analysts=inputs.selected_analysts,
         model_name=inputs.model_name,
         model_provider=inputs.model_provider,

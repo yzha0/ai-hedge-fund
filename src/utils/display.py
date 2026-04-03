@@ -70,8 +70,8 @@ def print_trading_output(result: dict) -> None:
                 # Wrap long reasoning text to make it more readable
                 wrapped_reasoning = ""
                 current_line = ""
-                # Use a fixed width of 60 characters to match the table column width
-                max_line_length = 60
+                # Use a fixed width of 100 characters to match the table column width
+                max_line_length = 100
                 for word in reasoning_str.split():
                     if len(current_line) + len(word) + 1 > max_line_length:
                         wrapped_reasoning += current_line + "\n"
@@ -124,8 +124,8 @@ def print_trading_output(result: dict) -> None:
         wrapped_reasoning = ""
         if reasoning:
             current_line = ""
-            # Use a fixed width of 60 characters to match the table column width
-            max_line_length = 60
+            # Use a fixed width of 100 characters to match the table column width
+            max_line_length = 100
             for word in reasoning.split():
                 if len(current_line) + len(word) + 1 > max_line_length:
                     wrapped_reasoning += current_line + "\n"
@@ -236,8 +236,8 @@ def print_trading_output(result: dict) -> None:
         # Wrap long reasoning text to make it more readable
         wrapped_reasoning = ""
         current_line = ""
-        # Use a fixed width of 60 characters to match the table column width
-        max_line_length = 60
+        # Use a fixed width of 500 characters to match the table column width
+        max_line_length = 500
         for word in reasoning_str.split():
             if len(current_line) + len(word) + 1 > max_line_length:
                 wrapped_reasoning += current_line + "\n"

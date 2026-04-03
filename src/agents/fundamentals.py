@@ -25,7 +25,7 @@ def fundamentals_analyst_agent(state: AgentState, agent_id: str = "fundamentals_
             ticker=ticker,
             end_date=end_date,
             period="ttm",
-            limit=10,
+            limit=30,
             api_key=api_key,
         )
 

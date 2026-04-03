@@ -126,6 +126,9 @@ class Portfolio:
         return quantity
 
     def apply_short_open(self, ticker: str, quantity: int, price: float) -> int:
+        '''
+        this method attempts to open a short position by selling shares that the portfolio does not currently own.
+        '''
         if quantity <= 0:
             return 0
         quantity = int(quantity)
@@ -167,6 +170,10 @@ class Portfolio:
         return 0
 
     def apply_short_cover(self, ticker: str, quantity: int, price: float) -> int:
+        '''
+        This method attempts to cover an existing short position by buying back shares that were previously sold short. It calculates the cost to cover, updates the position, and realizes any gains or losses from the short sale.
+        It also releases the margin that was used for the short position.
+        '''
         position = self._portfolio["positions"][ticker]
         quantity = min(int(quantity), position["short"]) if quantity > 0 else 0
         if quantity <= 0:

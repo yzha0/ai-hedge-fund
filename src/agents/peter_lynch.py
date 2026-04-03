@@ -99,12 +99,14 @@ def peter_lynch_agent(state: AgentState, agent_id: str = "peter_lynch_agent"):
         # Combine partial scores with weights typical for Peter Lynch:
         #   30% Growth, 25% Valuation, 20% Fundamentals,
         #   15% Sentiment, 10% Insider Activity = 100%
+
+        #edit 3/14: adjusted weights to better reflect Lynch's emphasis on growth and valuation; less on sentiment and insider activity
         total_score = (
-            growth_analysis["score"] * 0.30
-            + valuation_analysis["score"] * 0.25
+            growth_analysis["score"] * 0.40
+            + valuation_analysis["score"] * 0.35
             + fundamentals_analysis["score"] * 0.20
-            + sentiment_analysis["score"] * 0.15
-            + insider_activity["score"] * 0.10
+            + sentiment_analysis["score"] * 0.05
+            + insider_activity["score"] * 0.05
         )
 
         max_possible_score = 10.0

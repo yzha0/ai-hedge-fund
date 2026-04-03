@@ -6,6 +6,7 @@ import numpy as np
 import json
 from src.utils.api_key import get_api_key_from_state
 from src.tools.api import get_insider_trades, get_company_news
+from src.agents.news_sentiment import analyze_news_sentiment_data
 
 
 ##### Sentiment Agent #####
@@ -38,12 +39,11 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
         progress.update_status(agent_id, ticker, "Fetching company news")
 
         # Get the company news
-        company_news = get_company_news(ticker, end_date, limit=100, api_key=api_key)
+        company_news = get_company_news(ticker, end_date, limit=50, api_key=api_key)
 
-        # Get the sentiment from the company news
-        sentiment = pd.Series([n.sentiment for n in company_news]).dropna()
-        news_signals = np.where(sentiment == "negative", "bearish", 
-                              np.where(sentiment == "positive", "bullish", "neutral")).tolist()
+        progress.update_status(agent_id, ticker, "Analyzing news sentiment")
+        news_sentiment_result = analyze_news_sentiment_data(company_news, ticker, state, agent_id)
+        news_signals = news_sentiment_result["news_signals"]
         
         progress.update_status(agent_id, ticker, "Combining signals")
         # Combine signals from both sources with weights
@@ -89,9 +89,8 @@ def sentiment_analyst_agent(state: AgentState, agent_id: str = "sentiment_analys
                 }
             },
             "news_sentiment": {
-                "signal": "bullish" if news_signals.count("bullish") > news_signals.count("bearish") else 
-                         "bearish" if news_signals.count("bearish") > news_signals.count("bullish") else "neutral",
-                "confidence": round((max(news_signals.count("bullish"), news_signals.count("bearish")) / max(len(news_signals), 1)) * 100),
+                "signal": news_sentiment_result["signal"],
+                "confidence": news_sentiment_result["confidence"],
                 "metrics": {
                     "total_articles": len(news_signals),
                     "bullish_articles": news_signals.count("bullish"),

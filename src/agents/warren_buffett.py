@@ -8,6 +8,15 @@ from src.tools.api import get_financial_metrics, get_market_cap, search_line_ite
 from src.utils.llm import call_llm
 from src.utils.progress import progress
 from src.utils.api_key import get_api_key_from_state
+from src.utils.agent_debug import (
+    collect_data_gaps,
+    gap_if_count_lt,
+    gap_if_empty,
+    gap_if_len_lt,
+    gap_if_none,
+    log_data_fetch_debug,
+)
+
 
 
 class WarrenBuffettSignal(BaseModel):
@@ -29,7 +38,7 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
     for ticker in tickers:
         progress.update_status(agent_id, ticker, "Fetching financial metrics")
         # Fetch required data - request more periods for better trend analysis
-        metrics = get_financial_metrics(ticker, end_date, period="ttm", limit=10, api_key=api_key)
+        metrics = get_financial_metrics(ticker, end_date, period="quarterly", limit=30, api_key=api_key)
 
         progress.update_status(agent_id, ticker, "Gathering financial line items")
         financial_line_items = search_line_items(
@@ -49,14 +58,24 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
                 "free_cash_flow",
             ],
             end_date,
-            period="ttm",
-            limit=10,
+            period="quarterly",
+            limit=30,
             api_key=api_key,
         )
 
         progress.update_status(agent_id, ticker, "Getting market cap")
         # Get current market cap
         market_cap = get_market_cap(ticker, end_date, api_key=api_key)
+
+                #PATCH FOR DETECTING DATA LOSS
+        log_data_fetch_debug(
+            agent_id,
+            ticker,
+            metrics=metrics,
+            line_items=financial_line_items,
+            market_cap=market_cap,
+        )
+        
 
         progress.update_status(agent_id, ticker, "Analyzing fundamentals")
         # Analyze fundamentals
@@ -120,6 +139,32 @@ def warren_buffett_agent(state: AgentState, agent_id: str = "warren_buffett_agen
             "market_cap": market_cap,
             "margin_of_safety": margin_of_safety,
         }
+
+
+        # Log the analysis summary and any data gaps 
+        data_gaps = collect_data_gaps(
+            gap_if_empty("financial_metrics", metrics),
+            gap_if_empty("line_items", financial_line_items),
+            gap_if_len_lt("line_items", financial_line_items, 5, "<5 for predictability"),
+            gap_if_count_lt(
+                "fcf_points",
+                sum(
+                    1
+                    for item in financial_line_items
+                    if hasattr(item, "free_cash_flow") and item.free_cash_flow is not None
+                ),
+                3,
+                "<3 for valuation",
+            ),
+            gap_if_none("market_cap", market_cap),
+           
+        )
+        print(
+            f"[Warren_buffect][{ticker}] analysis "
+            f"score={total_score:.2f}/{max_possible_score} "
+            f"gaps={'none' if not data_gaps else ', '.join(data_gaps)}"
+        )
+        
 
         progress.update_status(agent_id, ticker, "Generating Warren Buffett analysis")
         buffett_output = generate_buffett_output(

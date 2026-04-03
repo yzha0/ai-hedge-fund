@@ -20,6 +20,9 @@ def add_common_args(
     include_analyst_flags: bool = True,
     include_ollama: bool = True,
 ) -> argparse.ArgumentParser:
+    '''
+    Wraps the common CLI arguments related to tickers, analysts and model selection. This is used across both backtesting and live trading CLIs to ensure consistency and reduce code duplication.
+    '''
     parser.add_argument(
         "--tickers",
         type=str,
@@ -203,7 +206,7 @@ def resolve_dates(start_date: str | None, end_date: str | None, *, default_month
     if start_date:
         final_start = start_date
     else:
-        months = default_months_back if default_months_back is not None else 3
+        months = default_months_back if default_months_back is not None else 6
         end_date_obj = datetime.strptime(final_end, "%Y-%m-%d")
         final_start = (end_date_obj - relativedelta(months=months)).strftime("%Y-%m-%d")
     return final_start, final_end
@@ -217,6 +220,7 @@ class CLIInputs:
     model_provider: str
     start_date: str
     end_date: str
+    look_back_months: int
     initial_cash: float
     margin_requirement: float
     show_reasoning: bool = False
@@ -254,6 +258,13 @@ def parse_cli_inputs(
         default=0.0,
         help="Initial margin requirement ratio for shorts (e.g., 0.5 for 50%%). Defaults to 0.0",
     )
+    parser.add_argument(
+        "--look-back-months",
+        dest="look_back_months",
+        type=int,
+        default=1,
+        help="Number of months of history to provide the agent on each backtest step. Defaults to 1",
+    )
 
     if include_reasoning_flag:
         parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
@@ -270,6 +281,7 @@ def parse_cli_inputs(
     })
     model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
     start_date, end_date = resolve_dates(getattr(args, "start_date", None), getattr(args, "end_date", None), default_months_back=default_months_back)
+    look_back_months = max(1, getattr(args, "look_back_months", 1))
 
     return CLIInputs(
         tickers=tickers,
@@ -278,11 +290,11 @@ def parse_cli_inputs(
         model_provider=model_provider,
         start_date=start_date,
         end_date=end_date,
+        look_back_months=look_back_months,
         initial_cash=getattr(args, "initial_cash", 100000.0),
         margin_requirement=getattr(args, "margin_requirement", 0.0),
         show_reasoning=getattr(args, "show_reasoning", False),
         show_agent_graph=getattr(args, "show_agent_graph", False),
         raw_args=args,
     )
-
 

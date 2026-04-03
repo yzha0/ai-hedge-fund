@@ -9,9 +9,11 @@ from src.cli.input import (
     parse_cli_inputs,
 )
 
+# This file serves as the entry point for running the backtesting engine with graceful handling of user interruptions (KeyboardInterrupt).
 
 def run_backtest(backtester: BacktestEngine) -> PerformanceMetrics | None:
-    """Run the backtest with graceful KeyboardInterrupt handling."""
+    """Wrapper to run the backtest and handle KeyboardInterrupt gracefully, showing partial results if available.
+    """
     try:
         performance_metrics = backtester.run_backtest()
         print(f"\n{Fore.GREEN}Backtest completed successfully!{Style.RESET_ALL}")
@@ -43,10 +45,10 @@ def run_backtest(backtester: BacktestEngine) -> PerformanceMetrics | None:
 if __name__ == "__main__":
     inputs = parse_cli_inputs(
         description="Run backtesting simulation",
-        require_tickers=False,
+        require_tickers=True,
         default_months_back=1,
-        include_graph_flag=False,
-        include_reasoning_flag=False,
+        include_graph_flag=True,
+        include_reasoning_flag=True,
     )
 
     # Create and run the backtester
@@ -60,6 +62,7 @@ if __name__ == "__main__":
         model_provider=inputs.model_provider,
         selected_analysts=inputs.selected_analysts,
         initial_margin_requirement=inputs.margin_requirement,
+        look_back_period_months=inputs.look_back_months,
     )
 
     # Run the backtest with graceful exit handling

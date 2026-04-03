@@ -27,11 +27,17 @@ def main() -> int:
     parser.add_argument(
         "--start-date",
         type=str,
-        default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
+        default=(datetime.now() - relativedelta(months=3)).strftime("%Y-%m-%d"),
         help="Start date YYYY-MM-DD",
     )
     parser.add_argument("--initial-capital", type=float, default=100000)
     parser.add_argument("--margin-requirement", type=float, default=0.0)
+    parser.add_argument(
+        "--look-back-months",
+        type=int,
+        default=1,
+        help="Number of months of history to provide the agent on each backtest step",
+    )
     parser.add_argument("--analysts", type=str, required=False)
     parser.add_argument("--analysts-all", action="store_true")
     parser.add_argument("--ollama", action="store_true")
@@ -138,6 +144,7 @@ def main() -> int:
         model_provider=model_provider,
         selected_analysts=selected_analysts,
         initial_margin_requirement=args.margin_requirement,
+        look_back_period_months=max(1, args.look_back_months),
     )
 
     metrics = engine.run_backtest()
@@ -166,7 +173,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 
 
 

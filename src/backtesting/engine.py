@@ -44,6 +44,7 @@ class BacktestEngine:
         model_provider: str,
         selected_analysts: list[str] | None,
         initial_margin_requirement: float,
+        look_back_period_months: int
     ) -> None:
         self._agent = agent
         self._tickers = tickers
@@ -53,6 +54,7 @@ class BacktestEngine:
         self._model_name = model_name
         self._model_provider = model_provider
         self._selected_analysts = selected_analysts
+        self._look_back_period_months = look_back_period_months
 
         self._portfolio = Portfolio(
             tickers=tickers,
@@ -105,7 +107,7 @@ class BacktestEngine:
             self._portfolio_values = []
 
         for current_date in dates:
-            lookback_start = (current_date - relativedelta(months=1)).strftime("%Y-%m-%d")
+            lookback_start = (current_date - relativedelta(months=self._look_back_period_months)).strftime("%Y-%m-%d")
             current_date_str = current_date.strftime("%Y-%m-%d")
             previous_date_str = (current_date - relativedelta(days=1)).strftime("%Y-%m-%d")
             if lookback_start == current_date_str:
@@ -130,7 +132,7 @@ class BacktestEngine:
                 continue
 
             agent_output = self._agent_controller.run_agent(
-                self._agent,
+                agent=self._agent,
                 tickers=self._tickers,
                 start_date=lookback_start,
                 end_date=current_date_str,
