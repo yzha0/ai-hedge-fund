@@ -1,13 +1,15 @@
 import datetime
+import logging
 import os
 import pandas as pd
 import requests
 import time
 
+logger = logging.getLogger(__name__)
+
 from src.data.cache import get_cache
 from src.data.models import (
     CompanyNews,
-    CompanyNewsResponse,
     FinancialMetrics,
     FinancialMetricsResponse,
     Price,
@@ -88,13 +90,15 @@ def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None)
     url = f"https://api.financialdatasets.ai/prices/?ticker={ticker}&interval=day&interval_multiplier=1&start_date={start_date}&end_date={end_date}"
     response = _make_api_request(url, headers)
     if response.status_code != 200:
+        logger.warning("Could not fetch prices for %s (HTTP %s)", ticker, response.status_code)
         return []
 
     # Parse response with Pydantic model
     try:
         price_response = PriceResponse(**response.json())
         prices = price_response.prices
-    except:
+    except (ValueError, KeyError) as e:
+        logger.warning("Failed to parse price data for %s: %s", ticker, e)
         return []
 
     if not prices:
@@ -129,13 +133,15 @@ def get_financial_metrics(
     url = f"https://api.financialdatasets.ai/financial-metrics/?ticker={ticker}&report_period_lte={end_date}&limit={limit}&period={period}"
     response = _make_api_request(url, headers)
     if response.status_code != 200:
+        logger.warning("Could not fetch financial metrics for %s (HTTP %s)", ticker, response.status_code)
         return []
 
     # Parse response with Pydantic model
     try:
         metrics_response = FinancialMetricsResponse(**response.json())
         financial_metrics = metrics_response.financial_metrics
-    except:
+    except (ValueError, KeyError) as e:
+        logger.warning("Failed to parse financial metrics for %s: %s", ticker, e)
         return []
 
     if not financial_metrics:
@@ -172,13 +178,15 @@ def search_line_items(
     }
     response = _make_api_request(url, headers, method="POST", json_data=body)
     if response.status_code != 200:
+        logger.warning("Could not fetch line items for %s (HTTP %s)", ticker, response.status_code)
         return []
-    
+
     try:
         data = response.json()
         response_model = LineItemResponse(**data)
         search_results = response_model.search_results
-    except:
+    except (ValueError, KeyError) as e:
+        logger.warning("Failed to parse line items for %s: %s", ticker, e)
         return []
     if not search_results:
         return []
@@ -219,14 +227,16 @@ def get_insider_trades(
 
         response = _make_api_request(url, headers)
         if response.status_code != 200:
+            logger.warning("Could not fetch insider trades for %s (HTTP %s)", ticker, response.status_code)
             break
 
         try:
             data = response.json()
             response_model = InsiderTradeResponse(**data)
             insider_trades = response_model.insider_trades
-        except:
-            break  # Parsing error, exit loop
+        except (ValueError, KeyError) as e:
+            logger.warning("Failed to parse insider trades for %s: %s", ticker, e)
+            break
 
         if not insider_trades:
             break
@@ -284,13 +294,18 @@ def get_company_news(
 
         response = _make_api_request(url, headers)
         if response.status_code != 200:
+            logger.warning("Could not fetch company news for %s (HTTP %s)", ticker, response.status_code)
             break
 
         try:
             data = response.json()
             raw_news = data.get("news", [])
             if not isinstance(raw_news, list):
-                print(f"News API Error: unexpected payload shape for {ticker}: keys={list(data.keys())}")
+                logger.warning(
+                    "Unexpected company news payload for %s: keys=%s",
+                    ticker,
+                    list(data.keys()),
+                )
                 break
 
             company_news = []
@@ -302,13 +317,16 @@ def get_company_news(
                     skipped_items += 1
 
             if skipped_items:
-                print(
-                    f"News API Warning: skipped {skipped_items} malformed news items "
-                    f"for {ticker} (limit={limit}, end_date={current_end_date})"
+                logger.warning(
+                    "Skipped %s malformed news items for %s (limit=%s, end_date=%s)",
+                    skipped_items,
+                    ticker,
+                    limit,
+                    current_end_date,
                 )
         except Exception as e:
-            print(f"News API Parse Error for {ticker}: {e}")
-            break  # Parsing error, exit loop
+            logger.warning("Failed to parse company news for %s: %s", ticker, e)
+            break
 
         if not company_news:
             break
@@ -355,7 +373,7 @@ def get_market_cap(
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
         if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
+            logger.warning("Could not fetch company facts for %s (HTTP %s)", ticker, response.status_code)
             return None
 
         data = response.json()
